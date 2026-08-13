@@ -98,3 +98,29 @@ cat >&2 "$comment_file"
 echo >&2 "==============================="
 
 assert_file_contains "$comment_file" "qr.rossjrw.com"
+
+echo >&2 "test sticky comments: PR number forwarding"
+echo >&2 "==============================="
+action_file="$(dirname "$0")/../../action.yml"
+sticky_number='number: ${{ inputs.pr-number || github.event.number }}'
+
+assert_file_contains "$action_file" "$sticky_number" "Sticky comment action should receive PR number with fallback expression"
+
+count=$(grep -Ec '^[[:space:]]+number: \$\{\{ inputs\.pr-number \|\| github\.event\.number \}\}$' "$action_file")
+assert_equals "2" "$count"
+
+deploy_count=$(awk '
+    /^[[:space:]]*- name: Leave a comment after deployment$/ { in_step=1; next }
+    in_step && /^[[:space:]]*- name: / { in_step=0 }
+    in_step && /number: \$\{\{ inputs\.pr-number \|\| github.event.number \}\}/ { count++ }
+    END { print count + 0 }
+' "$action_file")
+assert_equals "1" "$deploy_count"
+
+remove_count=$(awk '
+    /^[[:space:]]*- name: Leave a comment after removal$/ { in_step=1; next }
+    in_step && /^[[:space:]]*- name: / { in_step=0 }
+    in_step && /number: \$\{\{ inputs\.pr-number \|\| github.event.number \}\}/ { count++ }
+    END { print count + 0 }
+' "$action_file")
+assert_equals "1" "$remove_count"
